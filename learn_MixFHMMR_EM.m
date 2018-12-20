@@ -1,6 +1,6 @@
-function solution =  learn_MixFHMMR_EM(data, G, K, p, ...
+function MixFHMMR =  learn_MixFHMMR_EM(data, K, R, p, ...
     variance_type, ordered_states, total_EM_tries, max_iter_EM, init_kmeans, threshold, verbose)
-%   solution =  seq_clust_MixFHMMR(data, G, K, p,fs, variance_type,...
+%   MixFHMMR =  seq_clust_MixFHMMR(data, K, R, p,fs, variance_type,...
 %               order_constraint, total_EM_tries, max_iter_EM, init_kmeans, threshold, verbose)
 % Learn a mixture of Hidden Markov Moedel Regression for curve clustering by EM
 %
@@ -10,8 +10,8 @@ function solution =  learn_MixFHMMR_EM(data, G, K, p, ...
 %          1. data :  n curves each curve is composed of m points : dim(Y)=[n m] 
 %                * Each curve is observed during the interval [0,T]=[t_1,...,t_m]
 %                * t{j}-t_{j-1} = 1/fs (fs: sampling period)    
-%          2. G: number of clusters
-%          3. K: Number of polynomial regression components (regimes)
+%          2. K: number of clusters
+%          3. R: Number of polynomial regression components (regimes)
 %          4. p: degree of the polynomials
 % Options:
 %          1. order_constraint: set to one if ordered segments (by default 0)
@@ -26,28 +26,28 @@ function solution =  learn_MixFHMMR_EM(data, G, K, p, ...
 %
 % Outputs : 
 %
-%          solution : structure containing the following fields:
+%          MixFHMMR : structure containing the following fields:
 %                   
 %          1. param : a structure containing the model parameters
-%                       ({Wg},{alpha_g}, {beta_gk},{sigma_gk}) for g=1,...,G and k=1...K. 
-%              1.1 Wg = (Wg1,...,w_gK-1) parameters of the logistic process:
-%                  matrix of dimension [(q+1)x(K-1)] with q the order of logistic regression.
-%              1.2 beta_g = (beta_g1,...,beta_gK) polynomial regression coefficient vectors: matrix of
-%                  dimension [(p+1)xK] p being the polynomial  degree.
-%              1.3 sigma_g = (sigma_g1,...,sigma_gK) : the variances for the K regmies. vector of dimension [Kx1]
-%              1.4 pi_jgk :logistic proportions for cluster g
+%                       ({Wk},{alpha_k}, {beta_kr},{sigma_kr}) for k=1,...,K and k=1...R. 
+%              1.1 Wk = (Wk1,...,w_kR-1) parameters of the logistic process:
+%                  matrix of dimension [(q+1)x(R-1)] with q the order of logistic regression.
+%              1.2 beta_k = (beta_k1,...,beta_kR) polynomial regression coefficient vectors: matrix of
+%                  dimension [(p+1)xR] p being the polynomial  degree.
+%              1.3 sigma_k = (sigma_k1,...,sigma_kR) : the variances for the R regmies. vector of dimension [Rx1]
+%              1.4 pi_jkr :logistic proportions for cluster g
 %
-%          2. Psi: parameter vector of the model: Psi=({Wg},{alpha_g},{beta_gk},{sigma_gk}) 
+%          2. paramter_vector: parameter vector of the model: Psi=({Wg},{alpha_k},{beta_kr},{sigma_kr}) 
 %                  column vector of dim [nu x 1] with nu = nbr of free parametres
-%          3. h_ig = prob(curve|cluster_g) : post prob (fuzzy segmentation matrix of dim [nxG])
-%          4. c_ig : Hard partition obtained by the AP rule :  c_{ig} = 1
-%                    if and only c_i = arg max_g h_ig (g=1,...,G)
+%          3. h_ik = prob(curve|cluster_k) : post prob (fuzzy segmentation matrix of dim [nxK])
+%          4. c_ik : Hard partition obtained by the AP rule :  c_{ik} = 1
+%                    if and only c_i = arg max_k h_ik (k=1,...,K)
 %          5. klas : column vector of cluster labels
-%          6. tau_ijgk prob(y_{ij}|kth_segment,cluster_g), fuzzy
+%          6. tau_ijkr prob(y_{ij}|kth_segment,cluster_k), fuzzy
 %          segmentation for the cluster g. matrix of dimension
-%          [nmxK] for each g  (g=1,...,G).
-%          7. Ex_g: curve expectation: sum of the polynomial components beta_gk ri weighted by 
-%             the logitic probabilities pij_gk: Ex_g(j) = sum_{k=1}^K pi_jgk beta_gk rj, j=1,...,m. Ex_g 
+%          [nmxR] for each g  (g=1,...,K).
+%          7. Ex_k: curve expectation: sum of the polynomial components beta_kr ri weighted by 
+%             the logitic probabilities pij_kr: Ex_k(j) = sum_{k=1}^R pi_jkr beta_kr rj, j=1,...,m. Ex_k 
 %              is a column vector of dimension m for each g.
 %          8. loglik : at convergence of the EM algo
 %          9. stored_com-loglik : vector of stored valued of the
@@ -65,12 +65,12 @@ function solution =  learn_MixFHMMR_EM(data, G, K, p, ...
 
 warning off
 
-[n, m] = size(data);%n  nbre de signaux (individus); m: nbre de points pour chaque signal
-% % construction des matrices de regression
+[n, m] = size(data);%n  curves of m observations
+% regression matrix
 t=0:m-1;
 %t= linspace(0,1,m);
 [phi] = designmatrix(t,p);% pour 1 courbe
-Phi = repmat(phi,n,1);%pour les n courbes
+X = repmat(phi,n,1);% pour les n courbes
 %
 Y=reshape(data',[],1); 
 
@@ -81,12 +81,12 @@ best_loglik = -inf;
 cputime_total = [];
 while (try_EM < total_EM_tries)
     try_EM = try_EM +1;
-    fprintf('EM try n° %d\n',try_EM);
+    fprintf('EM_MixFHMMR try n� %d\n',try_EM);
     time = cputime;     
     %%%%%%%%%%%%%%%%%%%
     %  Initialization %
     %%%%%%%%%%%%%%%%%%%
-    param = initialize_MixFHMMR(data, G, K, Phi, variance_type, ordered_states, init_kmeans, try_EM);
+    param = init_MixFHMMR(data, K, R, X, variance_type, ordered_states, init_kmeans, try_EM);
 
     iter = 0; 
     converge = 0;
@@ -96,155 +96,154 @@ while (try_EM < total_EM_tries)
     % % EM %%%%
     while ~converge && (iter< max_iter_EM)
         %
-        exp_num_trans_cg  = zeros(K,K,n); 
-        exp_num_trans_from_l_cg = zeros(K,n);
+        exp_num_trans_ck  = zeros(R,R,n); 
+        exp_num_trans_from_l_cg = zeros(R,n);
         %
-        exp_num_trans = zeros(K,K,n,G);
-        exp_num_trans_from_l = zeros(K,n,G);
+        exp_num_trans = zeros(R,R,n,K);
+        exp_num_trans_from_l = zeros(R,n,K);
         %
-        %w_g_Pxi = zeros(n,G);
-        log_w_g_Pxi = zeros(n,G);
-        %tau_ig = zeros(n,G);
-        %log_tau_ig = zeros(n,G);
+        %w_k_fyi = zeros(n,K);
+        log_w_k_fyi = zeros(n,K);
+        %tau_ik = zeros(n,K);
+        %log_tau_ik = zeros(n,K);
         
         %%%%%%%%%%
         % E-Step %
         %%%%%%%%%%
-        gamma_igjk = zeros(n*m,K,G);
-        for g=1:G
+        gamma_ikjr = zeros(n*m,R,K);
+        for k=1:K
             % run a hmm for each sequence
-            %fgk_xij = zeros(K,m);
+            %fkr_xij = zeros(R,m);
             %
             Li = zeros(n,1);% to store the loglik for each example (curve)
             %
             for i=1:n
                 %if verbose; fprintf(1,'example %d\n',i); end
-                log_fgk_yij = zeros(K,m);                
+                log_fkr_yij = zeros(R,m);                
                 Y_i = data(i,:); % ith curve
-                for k = 1:K
-                    beta_gk = param.beta_gk(:,k,g);
+                for r = 1:R
+                    beta_kr = param.beta_kr(:,r,k);
                     if strcmp(variance_type,'common')
-                        sigma_gk = param.sigma_g(g);
-                        sk = sigma_gk;
+                        sigma_kr = param.sigma_k(k);
+                        sk = sigma_kr;
                     else
-                        sigma_gk = param.sigma_gk(:,g);
-                        sk = sigma_gk(k);
+                        sigma_kr = param.sigma_kr(:,k);
+                        sk = sigma_kr(r);
                     end
-                    z=((Y_i-(phi*beta_gk)').^2)/sk;
-                    log_fgk_yij(k,:) = -0.5*ones(1,m).*(log(2*pi)+log(sk)) - 0.5*z;% log pdf cond à c_i = g et z_i = k de xij
-                    %fgk_xij(k,:) = normpdf(X_i,(phi*beta_gk)',sqrt(sk));
+                    z=((Y_i-(phi*beta_kr)').^2)/sk;
+                    log_fkr_yij(r,:) = -0.5*ones(1,m).*(log(2*pi)+log(sk)) - 0.5*z;% log pdf yij | c_i = k et z_i = r
+                    %fkr_yij(k,:) = normpdf(X_i,(phi*beta_kr)',sqrt(sk));
                 end  
-                log_fgk_yij  = min(log_fgk_yij,log(realmax));
-                log_fgk_yij = max(log_fgk_yij ,log(realmin));
-                fgk_xij =  exp(log_fgk_yij);  
-                % forwards backwards ( calcul de logProb(Xi)...)
-                [gamma_ig, xi_ig, fwd_ig, backw_ig, loglik_i] = forwards_backwards(param.pi_g(:,g), param.A_g(:,:,g), fgk_xij);
+                log_fkr_yij  = min(log_fkr_yij,log(realmax));
+                log_fkr_yij = max(log_fkr_yij ,log(realmin));
+                fkr_yij =  exp(log_fkr_yij);  
+                % forwards backwards ( calcul de logProb(Yi)...)
+                [gamma_ik, xi_ik, fwd_ik, backw_ik, loglik_i] = forwards_backwards(param.pi_k(:,k), param.A_k(:,:,k), fkr_yij);
                 %
-                Li(i) = loglik_i; % loglik for the ith curve  ( logProb(Xi))                    
+                Li(i) = loglik_i; % loglik for the ith curve  ( logProb(Yi))                    
                 %
-                gamma_igjk((i-1)*m+1:i*m,:,g) = gamma_ig';%[n*m K G] : "segments" post prob for each cluster g
+                gamma_ikjr((i-1)*m+1:i*m,:,k) = gamma_ik';%[n*m R K] : "segments" post prob for each cluster k
                 %
-                exp_num_trans_cg(:,:,i) = sum(xi_ig,3); % [K K n]
-                exp_num_trans_from_l_cg(:,i) = gamma_ig(:,1);%[K x n]
+                exp_num_trans_ck(:,:,i) = sum(xi_ik,3); % [R R n]
+                exp_num_trans_from_l_cg(:,i) = gamma_ik(:,1);%[R x n]
                 %
             end
-            exp_num_trans_from_l(:,:,g) = exp_num_trans_from_l_cg;%[K n G]
-            exp_num_trans(:,:,:,g) = exp_num_trans_cg;%[K K n G]
+            exp_num_trans_from_l(:,:,k) = exp_num_trans_from_l_cg;%[R n K]
+            exp_num_trans(:,:,:,k) = exp_num_trans_ck;%[R R n K]
  
             % for computing the global loglik
-            %w_g_Pxi(:,g) = param.w_g(g)*exp(Li);%[nx1]
-            log_w_g_Pxi(:,g) = log(param.w_g(g)) + Li;%[nx1]
+            %w_k_fyi(:,k) = param.w_k(g)*exp(Li);%[nx1]
+            log_w_k_fyi(:,k) = log(param.w_k(k)) + Li;%[nx1]
         end
-        log_w_g_Pxi = min(log_w_g_Pxi,log(realmax));
-        log_w_g_Pxi = max(log_w_g_Pxi,log(realmin)); 
+        log_w_k_fyi = min(log_w_k_fyi,log(realmax));
+        log_w_k_fyi = max(log_w_k_fyi,log(realmin)); 
         
-        tau_ig = exp(log_w_g_Pxi)./(sum(exp(log_w_g_Pxi),2)*ones(1,G));%cluster post prob
+        tau_ik = exp(log_w_k_fyi)./(sum(exp(log_w_k_fyi),2)*ones(1,K));%cluster post prob
         
         % % log-likelihood for the n curves
-        loglik = sum(log(sum(exp(log_w_g_Pxi),2)));
+        loglik = sum(log(sum(exp(log_w_k_fyi),2)));
   
         %%%%%%%%%%%
         % M-Step  %
         %%%%%%%%%%%
         
-        % Maximization of Q1 w.r.t w_g 
-        param.w_g = sum(tau_ig,1)'/n; 
-        for g=1:G
+        % Maximization of Q1 w.r.t w_k 
+        param.w_k = sum(tau_ik,1)'/n; 
+        for k=1:K
             
             if strcmp(variance_type,'common'), s=0; end
 
-            weights_cluster_g = tau_ig(:,g);
+            weights_cluster_k = tau_ik(:,k);
             % Maximization of Q2 w.r.t \pi^g
-            exp_num_trans_g_from_l =   (ones(K,1)*weights_cluster_g').*exp_num_trans_from_l(:,:,g);%[K x n]
-            param.pi_g(:,g) = (1/sum(tau_ig(:,g)))*sum(exp_num_trans_g_from_l,2);% sum over i
+            exp_num_trans_k_from_l =   (ones(R,1)*weights_cluster_k').*exp_num_trans_from_l(:,:,k);%[R x n]
+            param.pi_k(:,k) = (1/sum(tau_ik(:,k)))*sum(exp_num_trans_k_from_l,2);% sum over i
             % Maximization of Q3 w.r.t A^g (the trans mat)
-            for k=1:K
+            for r=1:R
                 if n==1
-                    exp_num_trans_g(k,:,:) = (ones(K,1)*weights_cluster_g)'.*squeeze(exp_num_trans(k,:,:,g));
+                    exp_num_trans_k(r,:,:) = (ones(R,1)*weights_cluster_k)'.*squeeze(exp_num_trans(r,:,:,k));
                 else
-                    %exp_num_trans_g(k,:,:,g)
-                    exp_num_trans_g(k,:,:) = (ones(K,1)*weights_cluster_g').*squeeze(exp_num_trans(k,:,:,g));
+                    %exp_num_trans_k(k,:,:,g)
+                    exp_num_trans_k(r,:,:) = (ones(R,1)*weights_cluster_k').*squeeze(exp_num_trans(r,:,:,k));
                 end
             end
             if n==1
-                temp = exp_num_trans_g;
+                temp = exp_num_trans_k;
             else
-                temp = sum(exp_num_trans_g,3);%sum over i
+                temp = sum(exp_num_trans_k,3);%sum over i
             end
-            
-            param.A_g(:,:,g) = mk_stochastic(temp);
+            param.A_k(:,:,k) = mk_stochastic(temp);
             % if HMM with order constraints
             if ordered_states
-                param.A_g(:,:,g) = mk_stochastic(param.mask.*param.A_g(:,:,g));
+                param.A_k(:,:,k) = mk_stochastic(param.mask.*param.A_k(:,:,k));
             end
             
             % Maximisation de Q4 par rapport aux betak et sigmak
-            Ng = sum(tau_ig,1);%nbr of individuals within the cluster g ,g=1...G estimated at iteration q
-            %for g=1:G
-            ng = Ng(g); %cardinal nbr of the cluster g
+            Ng = sum(tau_ik,1);%nbr of individuals within the cluster k ,k=1...K estimated at iteration q
+            %for g=1:K
+            ng = Ng(k); %cardinal nbr of the cluster k
             % each sequence i (m observations) is first weighted by the cluster weights
-            weights_cluster_g =  repmat((tau_ig(:,g))',m,1);
-            weights_cluster_g = weights_cluster_g(:);
+            weights_cluster_k =  repmat((tau_ik(:,k))',m,1);
+            weights_cluster_k = weights_cluster_k(:);
             % secondly, the m observations of each sequance are weighted by the
             % wights of each segment k (post prob of the segments for each
             % cluster g)
-            gamma_ijk = gamma_igjk(:,:,g);% [n*m K]           
+            gamma_ijk = gamma_ikjr(:,:,k);% [n*m R]           
             
-            nm_gk=sum(gamma_ijk,1);% cardinal nbr of the segments k,k=1,...,K within each cluster g, at iteration q              
+            nm_kr=sum(gamma_ijk,1);% cardinal nbr of the segments r,r=1,...,R within each cluster k, at iteration q              
             
-            sigma_gk = zeros(K,1);
-            for k=1:K
-                nmgk = nm_gk(k);%cardinal nbr of segment k for the cluster g
-                weights_seg_k = gamma_ijk(:,k);
-                phigk = (sqrt(weights_cluster_g.*weights_seg_k)*ones(1,p+1)).*Phi;%[n*m x (p+1)]
-                Xgk = (sqrt(weights_cluster_g.*weights_seg_k)).*Y;%[n*m x 1] 
-                %  Weighted least squares: maximization w.r.t beta_gk
-                beta_gk(:,k) = inv(phigk'*phigk )*phigk'*Xgk; % Maximisation par rapport aux betak
-                % W_gk = diag(weights_cluster_g.*weights_seg_k);
-                % beta_gk(:,k) = inv(Phi'*W_gk*Phi)*Phi'*W_gk*X;
+            sigma_kr = zeros(R,1);
+            for r=1:R
+                nmkr = nm_kr(r);%cardinal nbr of segment r for the cluster k
+                weights_seg_k = gamma_ijk(:,r);
+                Xkr = (sqrt(weights_cluster_k.*weights_seg_k)*ones(1,p+1)).*X;%[n*m x (p+1)]
+                Ykr = (sqrt(weights_cluster_k.*weights_seg_k)).*Y;%[n*m x 1] 
+                %  Weighted least squares: maximization w.r.t beta_kr
+                beta_kr(:,r) = inv(Xkr'*Xkr )*Xkr'*Ykr; % Maximisation par rapport aux betakr
+                % W_kr = diag(weights_cluster_k.*weights_seg_k);
+                % beta_kr(:,k) = inv(Phi'*W_kr*Phi)*Phi'*W_kr*X;
                 
                 % % Maximization w.r.t sigmak :
-                z = sqrt(weights_cluster_g.*weights_seg_k).*(Y-Phi*beta_gk(:,k));
+                z = sqrt(weights_cluster_k.*weights_seg_k).*(Y-X*beta_kr(:,r));
                 if strcmp(variance_type,'common')
                     s = s + z'*z;                    
-                    ngm = sum(sum((weights_cluster_g*ones(1,K)).*gamma_ijk));
-                    sigma_g = s/ngm; 
+                    ngm = sum(sum((weights_cluster_k*ones(1,R)).*gamma_ijk));
+                    sigma_k = s/ngm; 
                 else
-                    ngmk = sum(weights_cluster_g.*weights_seg_k);
-                    sigma_gk(k)=  z'*z/(ngmk);
+                    ngmk = sum(weights_cluster_k.*weights_seg_k);
+                    sigma_kr(r)=  z'*z/(ngmk);
                 end
             end
-            param.beta_gk(:,:,g) = beta_gk;
+            param.beta_kr(:,:,k) = beta_kr;
             if strcmp(variance_type,'common')
-                param.sigma_g(g) = sigma_g;
+                param.sigma_k(k) = sigma_k;
             else
-                param.sigma_gk(:,g) = sigma_gk;
+                param.sigma_kr(:,k) = sigma_kr;
             end
         end
         iter=iter+1;
 
         if prev_loglik-loglik > threshold, fprintf(1, 'EM loglik is decreasing from %6.4f to %6.4f!\n', prev_loglik, loglik);end
-        if verbose, fprintf(1,'EM : Iteration : %d   log-likelihood : %f \n',  iter,loglik);end
+        if verbose, fprintf(1,'EM_MixFHMMR : Iteration : %d   log-likelihood : %f \n',  iter,loglik);end
            
            converge =  abs((loglik-prev_loglik)/prev_loglik) <= threshold;
            prev_loglik = loglik;           
@@ -252,71 +251,71 @@ while (try_EM < total_EM_tries)
     end % end of EM  loop   
     cputime_total = [cputime_total cputime-time];
     
-    solution.param = param; 
+    MixFHMMR.model = param; 
     if strcmp(variance_type,'common')
-       solution.Psi = [param.w_g(:); param.A_g(:); param.pi_g(:); param.beta_gk(:); param.sigma_g(:)];      
+       MixFHMMR.stats.paramter_vector = [param.w_k(:); param.A_k(:); param.pi_k(:); param.beta_kr(:); param.sigma_k(:)];      
     else
-       solution.Psi = [param.w_g(:); param.A_g(:); param.pi_g(:); param.beta_gk(:); param.sigma_gk(:)];      
+       MixFHMMR.stats.paramter_vector = [param.w_k(:); param.A_k(:); param.pi_k(:); param.beta_kr(:); param.sigma_kr(:)];      
     end
-    solution.tau_ig = tau_ig;
-    solution.gamma_igjk = gamma_igjk;
-    solution.loglik = loglik;
-    solution.stored_loglik = stored_loglik;    
-    solution.log_w_g_Pxi = log_w_g_Pxi;
+    MixFHMMR.stats.tau_ik = tau_ik;
+    MixFHMMR.stats.gamma_ikjr = gamma_ikjr;
+    MixFHMMR.stats.loglik = loglik;
+    MixFHMMR.stats.stored_loglik = stored_loglik;    
+    MixFHMMR.stats.log_w_k_fyi = log_w_k_fyi;
     
-    if solution.loglik > best_loglik
-       best_loglik = solution.loglik;
-       best_solution = solution;
+    if MixFHMMR.stats.loglik > best_loglik
+       best_loglik = MixFHMMR.stats.loglik;
+       best_MixFHMMR = MixFHMMR;
     end
       
-    if try_EM>=1,  fprintf('log-lik at convergence: %f \n', solution.loglik); end
+    if try_EM>=1,  fprintf('log-lik at convergence: %f \n', MixFHMMR.stats.loglik); end
     
 end% Fin de la boucle sur les essais EM
 
-solution.loglik = best_loglik;
+MixFHMMR.stats.loglik = best_loglik;
 
-if try_EM>1,  fprintf('log-lik max: %f \n', solution.loglik); end
+if try_EM>1,  fprintf('log-lik max: %f \n', MixFHMMR.stats.loglik); end
 
-solution = best_solution;
+MixFHMMR = best_MixFHMMR;
 % Finding the curve partition by using the MAP rule
-[klas, Cig] = MAP(solution.tau_ig);% MAP partition of the n sequences
-solution.klas = klas;
+[klas, Cig] = MAP(MixFHMMR.stats.tau_ik);% MAP partition of the n sequences
+MixFHMMR.stats.klas = klas;
 
-% cas où on prend la moyenne des gamma_ijgk
+% cas où on prend la moyenne des gamma_ijkr
 
-% mean_curves = zeros(m,K,G);
-%mean_gamma_ijk = zeros(m,K,G);
-smoothed = zeros(m,G);
-for g=1:G
-    betagk = solution.param.beta_gk(:,:,g);
-    weighted_segments = sum(solution.gamma_igjk(:,:,g).*(Phi*betagk),2);
+% mean_curves = zeros(m,R,K);
+%mean_gamma_ijk = zeros(m,R,K);
+smoothed = zeros(m,K);
+for k=1:K
+    betakr = MixFHMMR.model.beta_kr(:,:,k);
+    weighted_segments = sum(MixFHMMR.stats.gamma_ikjr(:,:,k).*(X*betakr),2);
     %
     weighted_segments = reshape(weighted_segments,m,n);
-    weighted_clusters = (ones(m,1)*solution.tau_ig(:,g)').* weighted_segments;
-    smoothed(:,g) = (1/sum(solution.tau_ig(:,g)))*sum(weighted_clusters,2);%(1/sum(solution.tau_ig(:,g)))*sum(gamma_igjk(:,:,g).*(X*ones(1,K)),2)
+    weighted_clusters = (ones(m,1)*MixFHMMR.stats.tau_ik(:,k)').* weighted_segments;
+    smoothed(:,k) = (1/sum(MixFHMMR.stats.tau_ik(:,k)))*sum(weighted_clusters,2);%(1/sum(MixFHMMR.stats.tau_ik(:,k)))*sum(gamma_ikjr(:,:,g).*(X*ones(1,R)),2)
 end
-solution.smoothed = smoothed;
-%solution.mean_curves = mean_curves;
-%solution.mean_gamma_ijk = mean_gamma_ijk;
-solution.cputime = mean(cputime_total);
+MixFHMMR.stats.smoothed = smoothed;
+%MixFHMMR.stats.mean_curves = mean_curves;
+%MixFHMMR.stats.mean_gamma_ijk = mean_gamma_ijk;
+MixFHMMR.stats.cputime = mean(cputime_total);
 
 % optimal sequence for the cluster g
-% for g=1:G
+% for g=1:K
 % % viterbi
-% path_g  = viterbi_path(solution.param.pi_g(:,g),solution.param.A_g(:,:,g), obslik)
-% %     path_g Zjk] = MAP(solution.mean_gamma_ijk(:,:,g));%MAP segmentation of each cluster of sequences
-%     solution.segments(:,g) = path_g;
+% path_k  = viterbi_path(MixFHMMR.model.pi_k(:,k),MixFHMMR.model.A_k(:,:,g), obslik)
+% %     path_k Zjk] = MAP(MixFHMMR.mean_gamma_ijk(:,:,g));%MAP segmentation of each cluster of sequences
+%     MixFHMMR.stats.segments(:,k) = path_k;
 % end
 
-nu = length(solution.Psi);
+nu = length(MixFHMMR.stats.paramter_vector);
 % BIC AIC et ICL*
-solution.BIC = solution.loglik - (nu*log(n)/2);%n*m/2!
-solution.AIC = solution.loglik - nu;
+MixFHMMR.stats.BIC = MixFHMMR.stats.loglik - (nu*log(n)/2);%n*m/2!
+MixFHMMR.stats.AIC = MixFHMMR.stats.loglik - nu;
 % ICL*             
 % Compute the comp-log-lik 
-cig_log_w_g_Pxi = (Cig).*(solution.log_w_g_Pxi);
-comp_loglik = sum(sum(cig_log_w_g_Pxi,2)); 
-solution.ICL1 = comp_loglik - nu*log(n)/2;%n*m/2!    
+cig_log_w_k_fyi = (Cig).*(MixFHMMR.stats.log_w_k_fyi);
+comp_loglik = sum(sum(cig_log_w_k_fyi,2)); 
+MixFHMMR.stats.ICL1 = comp_loglik - nu*log(n)/2;%n*m/2!    
     
     
     

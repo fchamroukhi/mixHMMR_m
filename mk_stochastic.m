@@ -10,7 +10,7 @@ function T = mk_stochastic(T)
 % This is valid since S(j) = 0 iff T(i,j) = 0 for all j
 
 if (ndims(T)==2) & (size(T,1)==1 | size(T,2)==1) % isvector
-  T = normalise(T);
+T = normalise(T);
 elseif ndims(T)==2 % matrix
   S = sum(T,2); 
   S = S + (S==0);

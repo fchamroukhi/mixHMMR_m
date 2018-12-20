@@ -1,3 +1,4 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Clustering and segmentation of time series (including with regime
 % changes) by mixture of gaussian Hidden Markov Models Regression (MixFHMMR) and the EM algorithm; i.e functional data
 % clustering and segmentation
@@ -29,26 +30,36 @@
 % type = {Ph.D. Thesis},
 % url ={https://chamroukhi.com/papers/FChamroukhi-Thesis.pdf}
 % }
+%
+% @article{Chamroukhi-FDA-2018,
+% 	Journal = {Wiley Interdisciplinary Reviews: Data Mining and Knowledge Discovery},
+% 	Author = {Faicel Chamroukhi and Hien D. Nguyen},
+% 	Note = {DOI: 10.1002/widm.1298.},
+% 	Volume = {},
+% 	Title = {Model-Based Clustering and Classification of Functional Data},
+% 	Year = {2019},
+% 	Month = {to appear},
+% 	url =  {https://chamroukhi.com/papers/MBCC-FDA.pdf}
+% 	}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clear
 close all;
 clc;
 
-% simulated time series
+%% simulated time series
 load simulated_data.mat
-
-% load waveform;
-% Brieman waveform
 
 Y; % time series
 
 
-% Model specification
-G = 3;% number of clusters
-K = 3;% number of regimes/states
+%% Model specification
+K = 3;% number of clusters
+R = 3;% number of regimes/states
 p = 2;% degree of the polynomial regressors
   
 
+%%
 % variance_type = 'common';
 variance_type = 'free';
 ordered_sates = 1;% binary
@@ -58,17 +69,9 @@ init_kmeans = 1;
 threshold = 1e-6;
 verbose = 1; 
 
-mixFHMMR =  learn_MixFHMMR_EM(Y, G, K, p, ...
+%%
+mixFHMMR =  learn_MixFHMMR_EM(Y, K, R, p, ...
     variance_type, ordered_sates, total_EM_tries, max_iter_EM, init_kmeans, threshold, verbose);
  
-% 
+%% 
 show_MixFHMMR_results(Y, mixFHMMR)
-
-
- 
-
-
-
-
-
-
